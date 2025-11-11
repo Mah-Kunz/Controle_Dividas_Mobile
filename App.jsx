@@ -8,10 +8,10 @@ import {
   FlatList,
   Modal,
   Alert,
-  ScrollView,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+// CORREÇÃO: Importação correta do SafeAreaView
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Importações do Firebase (SDK v9)
@@ -22,8 +22,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  // O Login Google no nativo é complexo e requer 'expo-google-app-auth' ou '@react-native-google-signin/google-signin'
-  // Vamos focar no Email/Senha por enquanto.
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -40,8 +38,15 @@ import {
   addDoc,
 } from 'firebase/firestore';
 
+// --- REFATORAÇÃO: Importação dos Modais ---
+import { AddDebtModal } from './components/AddDebtModal';
+import { CategoryManagerModal } from './components/CategoryManagerModal';
+import { CategoryPickerModal } from './components/CategoryPickerModal';
+import { EditParcelModal } from './components/EditParcelModal';
+import { EditGroupModal } from './components/EditGroupModal';
+
+
 // --- Configuração do Firebase ---
-// COLE A SUA CONFIGURAÇÃO DO FIREBASE AQUI
 const firebaseConfig = {
   apiKey: "AIzaSyD1IQ6u_VfG4rbnq0AFaT1jvLapEbntgUI",
   authDomain: "controle-dividas-aeca5.firebaseapp.com",
@@ -51,13 +56,9 @@ const firebaseConfig = {
   appId: "1:613010871623:web:37019d81909dd856816862"
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// O app ID (para o caminho do Firestore)
-// ATENÇÃO: Use o mesmo ID da web-app se for diferente
 const appId = 'default-app-id'; 
 
 // --- Componente: Tela de Login ---
@@ -95,7 +96,6 @@ function LoginScreen() {
   };
 
   return (
-    // CORREÇÃO: SafeAreaView é agora o wrapper principal deste ecrã
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"} 
@@ -124,7 +124,6 @@ function LoginScreen() {
         
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         
-        {/* CORREÇÃO: Os botões agora têm o tamanho correto (sem flex: 1) */}
         <TouchableOpacity style={styles.proButtonPrimary} onPress={handleLogin}>
           <Text style={styles.proButtonTextPrimary}>Entrar</Text>
         </TouchableOpacity>
@@ -139,25 +138,22 @@ function LoginScreen() {
 
 // --- Componente: Tela Principal do App ---
 function AppScreen({ user }) {
-  // Estado da Lista
   const [parcels, setParcels] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  
-  // NOVO: Estado dos Filtros
   const [includePaid, setIncludePaid] = useState(false);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(null); // null = Todas
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(null); 
+  const [selectedParcel, setSelectedParcel] = useState(null);
 
-  // Estado dos Modais
+  // Estados dos Modais
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [isCategoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  
+  // NOVOS ESTADOS DE MODAL
   const [isEditModalVisible, setEditModalVisible] = useState(false);
   const [isEditGroupModalVisible, setEditGroupModalVisible] = useState(false);
-  const [isCategoryPickerVisible, setCategoryPickerVisible] = useState(false);
-
-  // Item selecionado para Modais
-  const [selectedParcel, setSelectedParcel] = useState(null);
 
   // Helpers
   const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
@@ -167,38 +163,27 @@ function AppScreen({ user }) {
   }, [currentMonth]);
   
   const totalThisMonth = useMemo(() => {
-    // Calcula o total APENAS das não pagas, independente do filtro
     return parcels
       .filter(p => !p.paid)
       .reduce((acc, parcel) => acc + parcel.value, 0);
   }, [parcels]);
 
   // --- OUVINTES DO FIREBASE ---
-
-  // Ouvinte de Categorias
   useEffect(() => {
     if (!user) return;
     const categoriesCollectionPath = `artifacts/${appId}/users/${user.uid}/categories`;
     const q = query(collection(db, categoriesCollectionPath));
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setCategories(cats);
-    }, (error) => {
-      console.error("Erro ao buscar categorias:", error);
     });
-
     return () => unsubscribe();
   }, [user]);
 
-  // Ouvinte de Parcelas (por mês)
   useEffect(() => {
     if (!user) return;
-
-    // Calcula início e fim do mês
     const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
-    
     const startTimestamp = Timestamp.fromDate(start);
     const endTimestamp = Timestamp.fromDate(end);
 
@@ -208,7 +193,6 @@ function AppScreen({ user }) {
       where("paymentDate", "<=", endTimestamp)
     ];
 
-    // Adiciona filtros
     if (!includePaid) {
       queryConstraints.push(where("paid", "==", false));
     }
@@ -217,25 +201,20 @@ function AppScreen({ user }) {
     }
     
     const q = query(collection(db, parcelsCollectionPath), ...queryConstraints);
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const parcelas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       parcelas.sort((a, b) => a.paymentDate.seconds - b.paymentDate.seconds);
       setParcels(parcelas);
     }, (error) => {
       console.error("Erro ao buscar parcelas:", error);
-      Alert.alert("Erro de Índice", "Esta consulta precisa de um índice no Firebase. Verifique o console do seu navegador web (do app antigo) para copiar o link de criação do índice.");
+      Alert.alert("Erro de Índice", "Esta consulta precisa de um índice no Firebase.");
     });
 
     return () => unsubscribe();
-  }, [user, currentMonth, includePaid, selectedCategoryFilter]); // Re-busca com qualquer filtro
+  }, [user, currentMonth, includePaid, selectedCategoryFilter]);
 
   // --- Handlers de Ação ---
-
-  const handleLogout = () => {
-    signOut(auth);
-  };
-
+  const handleLogout = () => { signOut(auth); };
   const changeMonth = (amount) => {
     setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + amount, 1));
   };
@@ -250,12 +229,12 @@ function AppScreen({ user }) {
     }
   };
   
-  // --- Funções de Modal ---
-  const openDeleteModal = (item) => {
-    setSelectedParcel(item);
-    setDeleteModalVisible(true);
-  };
+  // --- Funções de Modal (Abrir/Fechar) ---
+  const openDeleteModal = (item) => { setSelectedParcel(item); setDeleteModalVisible(true); };
+  const openEditModal = (item) => { setSelectedParcel(item); setEditModalVisible(true); };
+  const openEditGroupModal = (item) => { setSelectedParcel(item); setEditGroupModalVisible(true); };
   
+  // --- Funções de Modal (Salvar/Excluir) ---
   const handleDeleteOne = async () => {
     if (!selectedParcel) return;
     const parcelRef = doc(db, `artifacts/${appId}/users/${user.uid}/parcels`, selectedParcel.id);
@@ -272,23 +251,61 @@ function AppScreen({ user }) {
   const handleDeleteGroup = async () => {
     if (!selectedParcel) return;
     const groupId = selectedParcel.debtGroupId;
-    
     const q = query(
       collection(db, `artifacts/${appId}/users/${user.uid}/parcels`),
       where("debtGroupId", "==", groupId)
     );
-    
     try {
       const querySnapshot = await getDocs(q);
       const batch = writeBatch(db);
       querySnapshot.forEach((doc) => batch.delete(doc.ref));
       await batch.commit();
-      
       setDeleteModalVisible(false);
       setSelectedParcel(null);
     } catch (e) {
       console.error("Erro ao excluir grupo:", e);
       Alert.alert("Erro", "Não foi possível excluir a dívida inteira.");
+    }
+  };
+
+  // NOVA FUNÇÃO DE SALVAR (Parcela Única)
+  const handleSaveEditParcel = async (newData) => {
+    if (!selectedParcel) return;
+    const parcelRef = doc(db, `artifacts/${appId}/users/${user.uid}/parcels`, selectedParcel.id);
+    try {
+      await updateDoc(parcelRef, newData);
+      setEditModalVisible(false);
+      setSelectedParcel(null);
+    } catch(e) {
+      console.error("Erro ao atualizar parcela:", e);
+      Alert.alert("Erro", "Não foi possível salvar as alterações.");
+    }
+  };
+  
+  // NOVA FUNÇÃO DE SALVAR (Grupo)
+  const handleSaveEditGroup = async (newDescription) => {
+    if (!selectedParcel) return;
+    const groupId = selectedParcel.debtGroupId;
+    const q = query(
+      collection(db, `artifacts/${appId}/users/${user.uid}/parcels`),
+      where("debtGroupId", "==", groupId),
+      where("paid", "==", false) // Apenas parcelas não pagas
+    );
+    try {
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        throw new Error("Nenhuma parcela em aberto encontrada para atualizar.");
+      }
+      const batch = writeBatch(db);
+      querySnapshot.forEach((doc) => {
+        batch.update(doc.ref, { debtDescription: newDescription });
+      });
+      await batch.commit();
+      setEditGroupModalVisible(false);
+      setSelectedParcel(null);
+    } catch (e) {
+      console.error("Erro ao atualizar grupo:", e);
+      Alert.alert("Erro", e.message || "Não foi possível salvar as alterações em lote.");
     }
   };
 
@@ -315,10 +332,11 @@ function AppScreen({ user }) {
               <Text style={styles.proButtonTextPrimary}>Pagar</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.proButtonGhost} onPress={() => Alert.alert("Editar Grupo", "WIP")}>
+          {/* BOTÕES ATUALIZADOS */}
+          <TouchableOpacity style={styles.proButtonGhost} onPress={() => openEditGroupModal(item)}>
              <Text style={styles.proButtonTextSecondary}>L</Text>{/* Layers */}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.proButtonGhost} onPress={() => Alert.alert("Editar", "WIP")}>
+          <TouchableOpacity style={styles.proButtonGhost} onPress={() => openEditModal(item)}>
              <Text style={styles.proButtonTextSecondary}>E</Text>{/* Edit */}
           </TouchableOpacity>
           <TouchableOpacity style={styles.proButtonGhost} onPress={() => openDeleteModal(item)}>
@@ -330,7 +348,6 @@ function AppScreen({ user }) {
   };
 
   return (
-    // CORREÇÃO: SafeAreaView é agora o wrapper principal deste ecrã
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
@@ -390,7 +407,6 @@ function AppScreen({ user }) {
       
       {/* Botões de Ação */}
       <View style={styles.actionButtonsContainer}>
-        {/* CORREÇÃO: Adicionado style={{flex: 1}} para os botões se dividirem */}
         <TouchableOpacity style={[styles.proButtonSecondary, {flex: 1}]} onPress={() => setCategoryModalVisible(true)}>
           <Text style={styles.proButtonTextSecondary}>Categorias</Text>
         </TouchableOpacity>
@@ -401,35 +417,26 @@ function AppScreen({ user }) {
 
       {/* --- MODAIS --- */}
 
-      {/* Modal: Adicionar Dívida */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      <AddDebtModal 
         visible={isAddModalVisible}
-        onRequestClose={() => setAddModalVisible(false)}
-      >
-        <AddDebtModal 
-          user={user}
-          categories={categories}
-          onClose={() => setAddModalVisible(false)}
-        />
-      </Modal>
+        user={user}
+        db={db}
+        appId={appId}
+        categories={categories}
+        onClose={() => setAddModalVisible(false)}
+        styles={styles}
+      />
 
-      {/* Modal: Gerenciar Categorias */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      <CategoryManagerModal 
         visible={isCategoryModalVisible}
-        onRequestClose={() => setCategoryModalVisible(false)}
-      >
-        <CategoryManagerModal 
-          user={user}
-          categories={categories}
-          onClose={() => setCategoryModalVisible(false)}
-        />
-      </Modal>
+        user={user}
+        db={db}
+        appId={appId}
+        categories={categories}
+        onClose={() => setCategoryModalVisible(false)}
+        styles={styles}
+      />
 
-      {/* Modal: Confirmação de Exclusão */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -455,7 +462,6 @@ function AppScreen({ user }) {
         </View>
       </Modal>
       
-      {/* Modal: Picker de Categoria (para o Filtro) */}
       <CategoryPickerModal
         visible={isCategoryPickerVisible}
         categories={categories}
@@ -465,327 +471,51 @@ function AppScreen({ user }) {
           setCategoryPickerVisible(false);
         }}
         showAllOption={true}
+        styles={styles}
+      />
+
+      {/* NOVOS MODAIS DE EDIÇÃO */}
+      <EditParcelModal
+        visible={isEditModalVisible}
+        parcel={selectedParcel}
+        onClose={() => { setEditModalVisible(false); setSelectedParcel(null); }}
+        onSave={handleSaveEditParcel}
+        styles={styles}
+      />
+      
+      <EditGroupModal
+        visible={isEditGroupModalVisible}
+        parcel={selectedParcel}
+        onClose={() => { setEditGroupModalVisible(false); setSelectedParcel(null); }}
+        onSave={handleSaveEditGroup}
+        styles={styles}
       />
 
     </SafeAreaView>
   );
 }
 
-// --- Componente: Modal de Adicionar Dívida ---
-function AddDebtModal({ user, categories, onClose }) {
-  const [description, setDescription] = useState('');
-  const [value, setValue] = useState('');
-  const [installments, setInstallments] = useState('');
-  const [calcMode, setCalcMode] = useState('total'); // 'total' ou 'installment'
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [isPickerVisible, setPickerVisible] = useState(false);
-  
-  // Data (simplificado para hoje)
-  const [startDate] = useState(new Date()); 
-
-  const handleSave = async () => {
-    const enteredValue = parseFloat(value);
-    const numInstallments = parseInt(installments);
-
-    if (!description || !enteredValue || !numInstallments) {
-      Alert.alert("Erro", "Preencha todos os campos.");
-      return;
-    }
-    
-    let totalValue;
-    let installmentValue;
-
-    if (calcMode === 'installment') {
-        installmentValue = enteredValue;
-        totalValue = installmentValue * numInstallments;
-    } else {
-        totalValue = enteredValue;
-        installmentValue = parseFloat((totalValue / numInstallments).toFixed(2));
-    }
-
-    const debtGroupId = crypto.randomUUID();
-    const batch = writeBatch(db);
-    const parcelsCollectionPath = `artifacts/${appId}/users/${user.uid}/parcels`;
-    const parcelsCollection = collection(db, parcelsCollectionPath);
-    let cumulativeValue = 0;
-
-    for (let i = 0; i < numInstallments; i++) {
-        const paymentDate = new Date(startDate);
-        paymentDate.setMonth(startDate.getMonth() + i);
-
-        let currentInstallmentValue = installmentValue;
-        if (calcMode === 'total') {
-            cumulativeValue += installmentValue;
-            if (i === numInstallments - 1) { // Ajuste da última parcela
-                const difference = totalValue - cumulativeValue;
-                currentInstallmentValue = parseFloat((installmentValue + difference).toFixed(2));
-            }
-        }
-
-
-        const parcelData = {
-            debtDescription: description,
-            debtGroupId: debtGroupId,
-            installmentNumber: i + 1,
-            totalInstallments: numInstallments,
-            value: currentInstallmentValue,
-            paymentDate: Timestamp.fromDate(paymentDate),
-            paid: false,
-            category: selectedCategory // Salva o objeto da categoria
-        };
-        const newParcelRef = doc(parcelsCollection);
-        batch.set(newParcelRef, parcelData);
-    }
-
-    try {
-      await batch.commit();
-      Alert.alert("Sucesso", `${numInstallments} parcelas criadas.`);
-      onClose();
-    } catch (e) {
-      console.error("Erro ao salvar dívida:", e);
-      Alert.alert("Erro", "Não foi possível salvar a dívida.");
-    }
-  };
-
-  return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"} 
-      style={styles.modalBackdrop}
-    >
-      <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <View style={styles.modalView}>
-          <Text style={styles.modalTitle}>Adicionar Nova Dívida</Text>
-          
-          <TextInput
-            style={styles.proInput}
-            placeholder="Descrição (Ex: TV da Sala)"
-            value={description}
-            onChangeText={setDescription}
-            placeholderTextColor="#9ca3af"
-          />
-          
-          {/* Seletor de Categoria Customizado */}
-          <TouchableOpacity style={styles.proInput} onPress={() => setPickerVisible(true)}>
-            <Text style={{color: selectedCategory ? '#000' : '#9ca3af'}}>
-              {selectedCategory ? selectedCategory.name : 'Escolha uma categoria...'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Tipo de Cálculo */}
-          <View style={styles.radioContainer}>
-            <TouchableOpacity style={styles.radioOption} onPress={() => setCalcMode('total')}>
-              <View style={[styles.radioOuter, calcMode === 'total' && styles.radioOuterActive]}>
-                {calcMode === 'total' && <View style={styles.radioInner} />}
-              </View>
-              <Text style={styles.radioLabel}>Valor Total</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.radioOption} onPress={() => setCalcMode('installment')}>
-              <View style={[styles.radioOuter, calcMode === 'installment' && styles.radioOuterActive]}>
-                {calcMode === 'installment' && <View style={styles.radioInner} />}
-              </View>
-              <Text style={styles.radioLabel}>Valor da Parcela</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.inputRow}>
-            <TextInput
-              style={[styles.proInput, {flex: 1}]}
-              placeholder={calcMode === 'total' ? 'Valor Total' : 'Valor da Parcela'}
-              value={value}
-              onChangeText={setValue}
-              keyboardType="numeric"
-              placeholderTextColor="#9ca3af"
-            />
-            <TextInput
-              style={[styles.proInput, {flex: 1, marginLeft: 10}]}
-              placeholder="Nº Parcelas"
-              value={installments}
-              onChangeText={setInstallments}
-              keyboardType="number-pad"
-              placeholderTextColor="#9ca3af"
-            />
-          </View>
-          
-          <TouchableOpacity style={[styles.proButtonPrimary, {flex: 0}]} onPress={handleSave}>
-            <Text style={styles.proButtonTextPrimary}>Salvar Dívida</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0}]} onPress={onClose}>
-            <Text style={styles.proButtonTextSecondary}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Modal: Picker de Categoria */}
-      <CategoryPickerModal
-        visible={isPickerVisible}
-        categories={categories}
-        onClose={() => setPickerVisible(false)}
-        onSelect={(cat) => {
-          setSelectedCategory(cat);
-          setPickerVisible(false);
-        }}
-      />
-    </KeyboardAvoidingView>
-  );
-}
-
-// --- Componente: Modal Gerenciador de Categorias ---
-function CategoryManagerModal({ user, categories, onClose }) {
-  const [name, setName] = useState('');
-  
-  const handleAddCategory = async () => {
-    if (!name) return;
-    const categoriesCollectionPath = `artifacts/${appId}/users/${user.uid}/categories`;
-    try {
-      await addDoc(collection(db, categoriesCollectionPath), {
-        name: name,
-        icon: 'tag', // Ícone e cor (simplificado)
-        color: '#64748B' 
-      });
-      setName('');
-    } catch (e) {
-      console.error("Erro ao adicionar categoria:", e);
-      Alert.alert("Erro", "Não foi possível salvar a categoria.");
-    }
-  };
-
-  const handleDeleteCategory = (categoryId) => {
-    Alert.alert(
-      "Excluir Categoria",
-      "Tem certeza? Isso não removerá a categoria de dívidas antigas.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Excluir", 
-          style: "destructive", 
-          onPress: async () => {
-            const categoryRef = doc(db, `artifacts/${appId}/users/${user.uid}/categories`, categoryId);
-            try {
-              await deleteDoc(categoryRef);
-            } catch (e) {
-              console.error("Erro ao excluir categoria:", e);
-              Alert.alert("Erro", "Não foi possível excluir.");
-            }
-          } 
-        }
-      ]
-    );
-  };
-  
-  return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"} 
-      style={styles.modalBackdrop}
-    >
-      <View style={styles.modalView}>
-        <Text style={styles.modalTitle}>Gerenciar Categorias</Text>
-        
-        <View style={styles.inputRow}>
-          <TextInput
-            style={[styles.proInput, {flex: 1}]}
-            placeholder="Nome da nova categoria"
-            value={name}
-            onChangeText={setName}
-            placeholderTextColor="#9ca3af"
-          />
-          <TouchableOpacity style={[styles.proButtonPrimary, {marginLeft: 10, marginBottom: 0, flex: 0}]} onPress={handleAddCategory}>
-            <Text style={styles.proButtonTextPrimary}>Salvar</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={categories}
-          style={styles.categoryList}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.categoryItem}>
-              <Text style={styles.categoryLabel}>{item.name}</Text>
-              <TouchableOpacity onPress={() => handleDeleteCategory(item.id)}>
-                <Text style={{color: 'red'}}>Excluir</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          ListEmptyComponent={<Text style={styles.emptyListText}>Nenhuma categoria cadastrada.</Text>}
-        />
-        
-        <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0}]} onPress={onClose}>
-          <Text style={styles.proButtonTextSecondary}>Fechar</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
-
-// --- Componente: Picker de Categoria Customizado ---
-function CategoryPickerModal({ visible, categories, onClose, onSelect, showAllOption = false }) {
-  return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalView}>
-          <Text style={styles.modalTitle}>Escolha uma Categoria</Text>
-          <FlatList
-            data={categories}
-            style={styles.categoryList}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.categoryPickerItem} onPress={() => onSelect(item)}>
-                <Text style={styles.categoryLabel}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-            ListHeaderComponent={
-              <>
-                {showAllOption && (
-                  <TouchableOpacity style={styles.categoryPickerItem} onPress={() => onSelect(null)}>
-                    <Text style={[styles.categoryLabel, {fontStyle: 'italic'}]}>Todas as categorias</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.categoryPickerItem} onPress={() => onSelect(null)}>
-                  <Text style={[styles.categoryLabel, {fontStyle: 'italic'}]}>Sem categoria</Text>
-                </TouchableOpacity>
-              </>
-            }
-          />
-          <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0}]} onPress={onClose}>
-            <Text style={styles.proButtonTextSecondary}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-
 // --- Componente Principal ---
-// CORREÇÃO: Removida a SafeAreaView daqui
 export default function App() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Ouve as mudanças de autenticação
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
     });
-    return () => unsubscribe(); // Limpa o ouvinte
+    return () => unsubscribe(); 
   }, []);
 
-  // Renderiza o ecrã apropriado (cada um com a sua própria SafeAreaView)
   return user ? <AppScreen user={user} /> : <LoginScreen />;
 }
 
 // --- Folha de Estilos (StyleSheet) ---
+// (Movida para o final para manter o App.jsx limpo no topo)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f8fafc', // bg-slate-50
   },
-  // container: { // Este estilo não é mais necessário no AppScreen
-  //   flex: 1,
-  // },
   // --- Estilos de Login ---
   loginContainer: {
     flex: 1,
@@ -833,14 +563,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     justifyContent: 'center',
     flex: 1,
-  },
-  proButton: {
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 8,
-    marginBottom: 12,
-    paddingHorizontal: 16,
   },
   proButtonPrimary: {
     backgroundColor: '#0f172a', // bg-slate-900
@@ -1003,6 +725,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1e293b', // slate-800
+    flexShrink: 1, // Permite que o texto quebre a linha se necessário
   },
   parcelDescriptionPaid: {
     textDecorationLine: 'line-through',
@@ -1067,6 +790,7 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
   },
   radioContainer: {
     flexDirection: 'row',
