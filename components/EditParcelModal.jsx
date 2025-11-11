@@ -9,51 +9,23 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Timestamp } from 'firebase/firestore';
+import { Feather } from '@expo/vector-icons'; // Importa os ícones
 
-// Função para formatar data YYYY-MM-DD (para o <TextInput type="date">, mas aqui só usamos para leitura)
-function formatDate(date) {
-    if (!date) return '';
-    const d = date.toDate ? date.toDate() : date; // Converte Timestamp se necessário
-    const year = d.getFullYear();
-    const month = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-
-export function EditParcelModal({ visible, parcel, onClose, onSave, styles }) {
+export function EditGroupModal({ visible, parcel, onClose, onSave, styles }) {
   const [description, setDescription] = useState('');
-  const [value, setValue] = useState('');
-  const [date, setDate] = useState(''); // Vamos guardar como string YYYY-MM-DD
 
-  // Popula o formulário quando a parcela selecionada muda
   useEffect(() => {
     if (parcel) {
       setDescription(parcel.debtDescription);
-      setValue(parcel.value.toString());
-      setDate(formatDate(parcel.paymentDate));
     }
   }, [parcel]);
 
   const handleSave = () => {
-    const newValue = parseFloat(value);
-    
-    // Validação simples da data (YYYY-MM-DD)
-    if (!description || !newValue || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos corretamente (Data: AAAA-MM-DD).");
+    if (!description) {
+      Alert.alert("Erro", "A descrição não pode estar vazia.");
       return;
     }
-    
-    // Converte a string de data de volta para um Objeto Date
-    // Adiciona T12:00:00 para evitar problemas de fuso horário
-    const newDate = new Date(date + 'T12:00:00'); 
-    
-    onSave({
-      debtDescription: description,
-      value: newValue,
-      paymentDate: Timestamp.fromDate(newDate)
-    });
+    onSave(description);
   };
 
   return (
@@ -68,35 +40,27 @@ export function EditParcelModal({ visible, parcel, onClose, onSave, styles }) {
         style={styles.modalBackdrop}
       >
         <View style={styles.modalView}>
-          <Text style={styles.modalTitle}>Editar Parcela</Text>
+          <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+            <Feather name="x" size={24} color="#64748b" />
+          </TouchableOpacity>
+
+          <Text style={styles.modalTitle}>Editar Dívida Inteira</Text>
+          <Text style={styles.modalText}>
+            A nova descrição será aplicada a esta e a todas as parcelas futuras (não pagas) desta dívida.
+          </Text>
           
           <TextInput
             style={styles.proInput}
-            placeholder="Descrição"
+            placeholder="Nova Descrição"
             value={description}
             onChangeText={setDescription}
             placeholderTextColor="#9ca3af"
           />
-          <TextInput
-            style={styles.proInput}
-            placeholder="Valor (R$)"
-            value={value}
-            onChangeText={setValue}
-            keyboardType="numeric"
-            placeholderTextColor="#9ca3af"
-          />
-          <TextInput
-            style={styles.proInput}
-            placeholder="Data Venc. (AAAA-MM-DD)"
-            value={date}
-            onChangeText={setDate}
-            placeholderTextColor="#9ca3af"
-          />
           
           <TouchableOpacity style={[styles.proButtonPrimary, {flex: 0}]} onPress={handleSave}>
-            <Text style={styles.proButtonTextPrimary}>Salvar Alterações</Text>
+            <Text style={styles.proButtonTextPrimary}>Salvar em Lote</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0}]} onPress={onClose}>
+          <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0, marginBottom: 0}]} onPress={onClose}>
             <Text style={styles.proButtonTextSecondary}>Cancelar</Text>
           </TouchableOpacity>
         </View>

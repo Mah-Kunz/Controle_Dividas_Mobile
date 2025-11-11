@@ -11,7 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { Timestamp, collection, doc, writeBatch } from 'firebase/firestore';
-import { CategoryPickerModal } from './CategoryPickerModal'; // Importa o picker
+import { CategoryPickerModal } from './CategoryPickerModal'; 
+import { Feather } from '@expo/vector-icons'; // Importa os ícones
 
 export function AddDebtModal({ visible, user, db, appId, categories, onClose, styles }) {
   const [description, setDescription] = useState('');
@@ -21,7 +22,6 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isPickerVisible, setPickerVisible] = useState(false);
   
-  // Data (simplificado para hoje)
   const [startDate] = useState(new Date()); 
 
   const handleSave = async () => {
@@ -57,7 +57,7 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
         let currentInstallmentValue = installmentValue;
         if (calcMode === 'total') {
             cumulativeValue += installmentValue;
-            if (i === numInstallments - 1) { // Ajuste da última parcela
+            if (i === numInstallments - 1) { 
                 const difference = totalValue - cumulativeValue;
                 currentInstallmentValue = parseFloat((installmentValue + difference).toFixed(2));
             }
@@ -72,7 +72,7 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
             value: currentInstallmentValue,
             paymentDate: Timestamp.fromDate(paymentDate),
             paid: false,
-            category: selectedCategory // Salva o objeto da categoria
+            category: selectedCategory 
         };
         const newParcelRef = doc(parcelsCollection);
         batch.set(newParcelRef, parcelData);
@@ -107,6 +107,12 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
       >
         <ScrollView contentContainerStyle={styles.scrollViewContent}>
           <View style={styles.modalView}>
+            
+            {/* NOVO: Botão de fechar */}
+            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+              <Feather name="x" size={24} color="#64748b" />
+            </TouchableOpacity>
+
             <Text style={styles.modalTitle}>Adicionar Nova Dívida</Text>
             
             <TextInput
@@ -117,7 +123,6 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
               placeholderTextColor="#9ca3af"
             />
             
-            {/* Seletor de Categoria Customizado */}
             <TouchableOpacity style={styles.proInput} onPress={() => setPickerVisible(true)}>
               <Text style={{color: selectedCategory ? '#000' : '#9ca3af'}}>
                 {selectedCategory ? selectedCategory.name : 'Escolha uma categoria...'}
@@ -162,14 +167,13 @@ export function AddDebtModal({ visible, user, db, appId, categories, onClose, st
             <TouchableOpacity style={[styles.proButtonPrimary, {flex: 0}]} onPress={handleSave}>
               <Text style={styles.proButtonTextPrimary}>Salvar Dívida</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0}]} onPress={onClose}>
+            <TouchableOpacity style={[styles.proButtonSecondary, {flex: 0, marginBottom: 0}]} onPress={onClose}>
               <Text style={styles.proButtonTextSecondary}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Modal: Picker de Categoria */}
       <CategoryPickerModal
         visible={isPickerVisible}
         categories={categories}
